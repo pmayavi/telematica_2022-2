@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
             error("ERROR reading from socket");
         printf("%s", buffer);
 
-        if (buffer[0] != 0) // Si le llega una peticion valida
+        if (buffer[0] != 0 && buffer[0] != '#') // Si le llega una peticion valida
         {
             // Envia una respuesta HTTP la cual le entrega al cliente un html, estos deben tener menos de 2048 caracteres
             char message[2048] = "HTTP/1.0 200 OK\r\nHost: http://54.147.55.156\r\nContent-type: text/html\r\n\r\n<html><head><meta charset=\"utf-8\"><title>Proxy Inverso</title></head><body><h2>Hola desde el servidor 1</h2><img src=\"https://pioneeroptimist.com/wp-content/uploads/2021/03/among-us-6008615_1920-838x900.png\"></body></html>\r\n";

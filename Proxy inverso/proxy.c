@@ -12,6 +12,7 @@
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
 #include <strings.h>
 #include <netdb.h>
+#include <time.h>
 
 // Definicion de constantes
 #define TRUE 1
@@ -27,7 +28,10 @@ void error(char *msg)
 // Metodo main recibe un argumento, el puerto 8080
 int main(int argc, char *argv[])
 {
-    int PORT = atoi(argv[1]);
+    float TTL = (float)atof(argv[1]);
+    int PORT = atoi(argv[2]);
+    FILE *log;
+
     int opt = TRUE;
     // num_servers es la cantidad de servidores que responden las peticiones
     int master_socket, addrlen, new_socket, num_servers = 3;
@@ -35,6 +39,9 @@ int main(int argc, char *argv[])
     int server = 0, max_clients = 30, activity, i, valread, sd;
     int max_sd, client_socket[max_clients];
     struct sockaddr_in address;
+
+    time_t rawtime;
+    struct tm *timeinfo;
 
     char buffer[2049];            // data buffer de 2K
     char peticiones[num_servers]; // Guarda cual cliente le hizo peticion a un servidor
@@ -85,7 +92,7 @@ int main(int argc, char *argv[])
 
     // Aceptar las conexiones entrantes
     addrlen = sizeof(address);
-    puts("Waiting for connections ...");
+    puts("Esperando a los servidores...\n");
 
     while (TRUE)
     {
@@ -95,6 +102,7 @@ int main(int argc, char *argv[])
         // Incluir al master socket en el set de sockets
         FD_SET(master_socket, &readfds);
         max_sd = master_socket;
+        log = fopen("conexiones.log", "a+");
 
         // Incluir las sockets hijas al set de sockets
         for (i = 0; i < max_clients; i++)
@@ -129,10 +137,11 @@ int main(int argc, char *argv[])
                 perror("accept");
                 exit(EXIT_FAILURE);
             }
-
             // Se guarda con quien se establecio la conexion y mas datos
-            printf("Nueva conexion, socketfd: %d , ip: %s , puerto: %d\n",
-                   new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+            time(&rawtime);
+            timeinfo = localtime(&rawtime);
+            printf("%sNueva conexion %s\n\n", asctime(timeinfo), inet_ntoa(address.sin_addr));
+            fprintf(log, "%sNueva conexion %s", asctime(timeinfo), inet_ntoa(address.sin_addr));
 
             // Añade la nueva socket al array de sockets disponibles
             for (i = 0; i < max_clients; i++)
@@ -141,26 +150,26 @@ int main(int argc, char *argv[])
                 if (client_socket[i] == 0)
                 {
                     client_socket[i] = new_socket;
-                    printf("Guardando la socket como numero %d\n", i);
-
+                    printf("Guardando la socket como numero %d\n\n", i);
                     // Las n primeras conexiones, son los servidores
                     if (i < num_servers)
                     {
                         char num[35];
-                        snprintf(num, 35, "Asignado como server %d\n", i);
+                        snprintf(num, 35, "# Asignado como server %d\n", i);
                         send(new_socket, num, strlen(num), 0);
                     }
                     break;
                 }
             }
         }
-
+        fclose(log);
         // Si no fue con la master socket, es comunicacion con una socket existente
         for (i = 0; i < max_clients; i++)
         {
             sd = client_socket[i];
             if (FD_ISSET(sd, &readfds))
             {
+                log = fopen("conexiones.log", "a+");
                 // Mira si fue el cierre de conexion
                 // read lee el mensaje que llego y lo guarda en buffer
                 if ((valread = read(sd, buffer, 2048)) == 0)
@@ -168,8 +177,10 @@ int main(int argc, char *argv[])
                     // Se desconecto, se imprime los detalles de quien fue
                     getpeername(sd, (struct sockaddr *)&address,
                                 (socklen_t *)&addrlen);
-                    printf("Host desconectado, ip: %s , puerto: %d \n",
-                           inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+                    time(&rawtime);
+                    timeinfo = localtime(&rawtime);
+                    printf("%sHost desconectado: %s\n\n", asctime(timeinfo), inet_ntoa(address.sin_addr));
+                    fprintf(log, "%sHost desconectado: %s\n\n", asctime(timeinfo), inet_ntoa(address.sin_addr));
                     // Cerrar la socket y dejar disponible el espacio en el array de sockets
                     close(sd);
                     client_socket[i] = 0;
@@ -182,6 +193,13 @@ int main(int argc, char *argv[])
                     // Si su numero de socket es mayor al numero de servidores, es un cliente
                     if (i > num_servers - 1)
                     {
+                        getpeername(sd, (struct sockaddr *)&address,
+                                    (socklen_t *)&addrlen);
+                        time(&rawtime);
+                        timeinfo = localtime(&rawtime);
+                        printf("%sPeticion de %s: %s\n\n", asctime(timeinfo), inet_ntoa(address.sin_addr), buffer);
+                        fprintf(log, "%sPeticion de %s: %s\n\n", asctime(timeinfo), inet_ntoa(address.sin_addr), buffer);
+
                         // Se envia la peticion a un servidor
                         send(client_socket[server], buffer, strlen(buffer), 0);
                         peticiones[server] = i; // Se guarda cual cliente hizo la solicitud a ese servidor
@@ -191,19 +209,28 @@ int main(int argc, char *argv[])
                         else
                             server = 0;
                     }
-                    else if (client_socket[peticiones[i]] != 0) // Es una respuesta de un servidor
+                    else if (peticiones[i] != 0) // Es una respuesta de un servidor
                     {
                         sd = client_socket[peticiones[i]]; // Se le entrega al socket que le hizo la peticion
-                        send(sd, buffer, strlen(buffer), 0);
+
                         getpeername(sd, (struct sockaddr *)&address,
                                     (socklen_t *)&addrlen);
-                        printf("Host desconectado, ip: %s , puerto: %d \n",
-                               inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+                        time(&rawtime);
+                        timeinfo = localtime(&rawtime);
+                        printf("%sRespuesta a %s: %s\n\n", asctime(timeinfo), inet_ntoa(address.sin_addr), buffer);
+                        fprintf(log, "%sRespuesta a %s: %s\n\n", asctime(timeinfo), inet_ntoa(address.sin_addr), buffer);
+
+                        send(sd, buffer, strlen(buffer), 0);
+                        time(&rawtime);
+                        timeinfo = localtime(&rawtime);
+                        printf("%sHost desconectado: %s\n\n", asctime(timeinfo), inet_ntoa(address.sin_addr));
+                        fprintf(log, "%sHost desconectado: %s\n\n", asctime(timeinfo), inet_ntoa(address.sin_addr));
                         // Se cierra la conexion con el cliente quien ya recibio su respuesta
                         close(sd);
                         client_socket[peticiones[i]] = 0;
                     }
                 }
+                fclose(log);
             }
         }
     }
