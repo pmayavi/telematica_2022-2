@@ -28,20 +28,58 @@ void error(char *msg)
 // Metodo main recibe un argumento, el puerto 8080
 int main(int argc, char *argv[])
 {
-    int PORT = atoi(argv[1]);
-    FILE *log;
+    // Proceso para leer el archivo de configuracion
+    FILE *config;
+    char *line = NULL;
+    char param[5];
+    char parameters[4][5];
+    size_t len = 0;
+    size_t len2 = 0;
+    size_t len3 = 0;
+    ssize_t r;
 
-    int opt = TRUE;
+    config = fopen("c.config", "r");
+    if (config == NULL)
+        exit(EXIT_FAILURE);
+
+    // Lee linea por linea
+    while ((r = getline(&line, &len, config)) != -1)
+    {
+        for (size_t i = 0; i < r; i++)
+        {
+            if (line[i] == ' ') // Solo toma los valores importantes
+            {
+                i++;
+                param[len2] = line[i];
+                len2++;
+                i++;
+                while (line[i] != '\n' && line[i] != 0)
+                {
+                    param[len2] = line[i];
+                    len2++;
+                    i++;
+                }
+                param[len2] = 0;
+                len2 = 0;
+                strcpy(parameters[len3], param); // Guarda los parametros en un char**
+                len3++;
+                break;
+            }
+        }
+    }
+    fclose(config);
+    // El puerto que escucha el pibl
+    int PORT = atoi(parameters[0]);
     // num_servers es la cantidad de servidores que responden las peticiones
-    int num_servers = 3;
+    int num_servers = atoi(parameters[1]);
     // max_clients es la cantidad maxima de conecciones distintas que se permiten
-    int max_clients = 30;
+    int max_clients = atoi(parameters[2]);
     // cache_size es el numero maximo de archivos que se guardan en cache
-    int cache_size = 5;
+    int cache_size = atoi(parameters[3]);
 
     int master_socket, addrlen, new_socket, activity;
     int server = 0, i, j, valread, cache_current = 0;
-    int client_socket[max_clients], sd, max_sd;
+    int client_socket[max_clients], sd, max_sd, opt = TRUE;
     // Cada elemento del cache esta compuesto de 3 cosas: cual es, que es, y la ultima vez que fue usado
     char cache[cache_size][2048], cachename[cache_size];
     double TTL, cacheTTL[cache_size];
@@ -50,6 +88,7 @@ int main(int argc, char *argv[])
     time_t rawtime;
     struct tm *timeinfo;
     struct sockaddr_in address;
+    FILE *log;
 
     char buffer[2048];            // data buffer de 2K
     char peticiones[num_servers]; // Guarda cual cliente le hizo peticion a un servidor
