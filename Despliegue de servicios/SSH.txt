@@ -1,0 +1,1 @@
+ssh -i "proyecto 2.pem" ubuntu@ec2-3-93-159-159.compute-1.amazonaws.com
